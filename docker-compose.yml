@@ -1,0 +1,31 @@
+networks:
+  medods-auth:
+    external: true
+
+
+services:
+
+  postgresql:
+    restart: always
+    image: postgres:14
+    command: ["postgres", "-c", "log_statement=all", "-c", "log_destination=stderr, csvlog"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+      - ./postgreSQL/create.sql:/docker-entrypoint-initdb.d/create.sql
+    ports:
+      - 3333:5432
+    networks:
+      - medods-auth
+    container_name: congratulations-postgres
+
+  app:
+    image: medods-auth-app
+    ports:
+      - 8022:8020
+    networks:
+      - medods-auth
+    command: ["/app/bin"]
