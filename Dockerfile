@@ -2,14 +2,6 @@ FROM golang:1.22.5-bullseye AS cert-installer
 
 WORKDIR /app
 
-ENV JWT_SECRET="jwt_secret_example"
-ENV host_db="auth-postgres"
-ENV port_db="5432"
-ENV user_db="postgres"
-ENV password_db="postgres"
-ENV dbname_db="postgres"
-ENV sslmode_db="disable"
-
 COPY /keys/server.crt /usr/local/share/ca-certificates/server.crt
 RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
 
@@ -26,6 +18,9 @@ COPY --from=cert-installer /usr/local/share/ca-certificates/server.crt /usr/loca
 RUN update-ca-certificates
 
 RUN --mount=type=cache,target="/root/.cache/go-build" go build -o bin .
+
+COPY wait-for-it.sh /usr/local/bin/wait-for-it.sh
+RUN chmod +x /usr/local/bin/wait-for-it.sh
 
 FROM builder AS final
 

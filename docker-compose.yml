@@ -15,12 +15,12 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - ./pgdata:/var/lib/postgresql/data
-      - ./postgreSQL/create.sql:/docker-entrypoint-initdb.d/create.sql
+      - ./postgres/create.sql:/docker-entrypoint-initdb.d/create.sql
     ports:
       - 3333:5432
     networks:
       - medods-auth
-    container_name: congratulations-postgres
+    container_name: medods-auth-postgres
 
   app:
     image: medods-auth-app
@@ -28,4 +28,15 @@ services:
       - 8022:8020
     networks:
       - medods-auth
-    command: ["/app/bin"]
+    depends_on:
+      - postgresql
+    container_name: medods-auth-app
+    environment:
+      JWT_SECRET: "jwt_secret_example"
+      host_db: "medods-auth-postgres"
+      port_db: "5432"
+      user_db: "postgres"
+      password_db: "postgres"
+      dbname_db: "postgres"
+      sslmode_db: "disable"
+    command:  ["wait-for-it.sh", "medods-auth-postgres:5432", "--", "/app/bin"]

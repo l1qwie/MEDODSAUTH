@@ -4,9 +4,6 @@ var SymKey []byte
 
 // Data about a client
 type Client struct {
-	ID       int    `json:"id"`
-	FName    string `json:"first_name"`
-	LName    string `json:"last_name"`
 	Nickname string `json:"nickname"`
 	Email    string `json:"email"`
 }

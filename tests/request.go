@@ -2,10 +2,8 @@ package tests
 
 import (
 	"bytes"
-	"crypto/sha512"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,28 +32,16 @@ func createClient() *http.Client {
 	return client
 }
 
-func keyFunc(token *jwt.Token) (interface{}, error) {
-	_, ok := token.Method.(*jwt.SigningMethodECDSA)
-	if !ok {
-		panic("No Access-Token in the response")
-	}
-	return token, nil
-}
-
-func getAccessAndRefresh(body []byte) *apptype.DoubleKeys {
+func getAccessAndRefresh(id int) *apptype.DoubleKeys {
 	var (
-		// acctoken, reftoken   *jwt.Token
 		respbody, decodedMes []byte
 		req                  *http.Request
 		resp                 *http.Response
 	)
 	doublekey := new(apptype.DoubleKeys)
 	client := createClient()
-	encodedBody, err := api.Encode(body, apptype.SymKey)
-	if err != nil {
-		panic(fmt.Sprintf("Coudln't encode body: %s", err))
-	}
-	req, err = http.NewRequest("GET", "https://localhost:3000/test_login", bytes.NewBuffer(encodedBody))
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://localhost:3000/test_login/hash/usual/%d", id), bytes.NewBuffer(nil))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create a request: %s", err))
@@ -81,6 +67,7 @@ func getAccessAndRefresh(body []byte) *apptype.DoubleKeys {
 	if err != nil {
 		panic(fmt.Sprintf("Couldn't decode []byte to go-stucter: %s", err))
 	}
+	log.Printf("Response: %+v", doublekey)
 	return doublekey
 }
 
@@ -105,60 +92,40 @@ func checkRefreshString(t string) string {
 	if err != nil {
 		panic(err)
 	}
-
-	reftoken := string(base64Text)
-	claims := make(map[string]interface{})
-	parts := strings.Split(reftoken, ".")
-
-	if len(parts) != 3 {
-		panic("The refresh-token is incorrect")
-	}
-
-	if err := json.Unmarshal([]byte(parts[1]), &claims); err != nil {
-		panic("Failed to unmarshal part[1] to claims")
-	}
-
-	ip, ok := claims["ip"].(string)
-	if !ok {
-		panic("ClientIP doesn't exist in the payload part of the have gotten token")
-
-	} else {
-		if ip != api.ClientIP {
-			panic(fmt.Sprintf("ip != api.ClientIP. Ip = %s and api.ClientIP = %s", ip, api.ClientIP))
-		}
-
-	}
-
-	expAt, ok := claims["expAt"].(time.Time)
-	if !ok {
-		panic("expAt doesn't exist in the payload part of the have gotten token")
-
-	} else {
-		if expAt != time.Now().Add(10*time.Hour) {
-			panic("The time in the token doesn't compare with the expected time")
-		}
-	}
-	return reftoken
+	return string(base64Text)
 }
 
-func checkAccessToken(sha512Token string) {
-	token := jwt.New(jwt.SigningMethodEdDSA)
-	claims := token.Claims.(jwt.MapClaims)
-	claims["expAt"] = time.Now().Add(10 * time.Minute)
-	claims["ip"] = api.ClientIP
-
-	tokenString, err := token.SignedString(os.Getenv("JWT_SECRET"))
-	if err != nil {
-		panic(err)
+func checkAccessToken(RespToken string) {
+	token, err := jwt.Parse(RespToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("there was an error in parsing")
+		}
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+	if token == nil && err != nil {
+		panic(fmt.Sprint("invalid token ", err))
 	}
 
-	hash := sha512.New()
-	hash.Write([]byte(tokenString))
-	hashBytes := hash.Sum(nil)
-	hashString := hex.EncodeToString(hashBytes)
-	if sha512Token != hashString {
-		panic(fmt.Sprintf("Access-tokens don't match to each other. Just genereted token is: %s and have gotten tokes is: %s", hashString, sha512Token))
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		panic("couldn't parse claims")
 	}
+
+	ip := claims["ip"].(string)
+	if ip != api.ClientIP {
+		panic("Client api doesn't match to the expected one")
+	}
+
+	expiredAt, ok := claims["expAt"].(float64)
+	if !ok {
+		panic("couldn't parse expAt")
+	}
+
+	expiredAtInt := int64(expiredAt)
+	if expiredAtInt != time.Now().Add(30*time.Minute).Unix() {
+		panic("token time isn't true")
+	}
+	log.Print("Access token is OK")
 }
 
 func checkAccessTokenJWT(t *jwt.Token) {
@@ -204,27 +171,27 @@ func checkRefreshTokenJWT(t *jwt.Token) {
 }
 
 func getAssessAndRefresh(con *storage.Connection) {
-	body, err := json.Marshal(&apptype.Client{
-		Nickname: "eewsss",
-		Email:    "example@gmail.com",
-	})
-	if err != nil {
-		panic(err)
-	}
+	defer con.DeleteCliets()
+	defer con.RestartSeq()
 
-	doubleKeys := getAccessAndRefresh(body)
+	id := con.CreateNewClient("misha", "example@gmail.com", "123.32.232.34")
+
+	doubleKeys := getAccessAndRefresh(id)
 
 	checkAccessToken(doubleKeys.Access)
 	reftoken := checkRefreshString(doubleKeys.Refresh)
 
-	tokenDB, err := con.GetRefreshTokens("eewsss")
+	tokenDB, err := con.GetRefreshToken(id)
 	if err != nil {
 		panic(err)
 	}
 
-	if err = bcrypt.CompareHashAndPassword([]byte(tokenDB), []byte(reftoken)); err != nil {
+	if err = bcrypt.CompareHashAndPassword(tokenDB, []byte(reftoken)); err != nil {
 		panic(fmt.Sprintf("The token in the database doesn't compare to reftoken: %s", reftoken))
+	} else {
+		log.Print("Refresh token is OK")
 	}
+	log.Print("test getAssessAndRefresh() has just finished")
 }
 
 // Start all of tests that exist in this module
