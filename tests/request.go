@@ -10,11 +10,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt/v5"
-	api "github.com/l1qwie/MEDODSAUTH/api/rest"
+	"github.com/l1qwie/MEDODSAUTH/api"
 	"github.com/l1qwie/MEDODSAUTH/apptype"
 	"github.com/l1qwie/MEDODSAUTH/storage"
 	"golang.org/x/crypto/bcrypt"
@@ -32,7 +31,8 @@ func createClient() *http.Client {
 	return client
 }
 
-func getAccessAndRefresh(id int) *apptype.DoubleKeys {
+// Send a request to the server
+func callAccessAndRefreshServer(id int, method, name, reftoken string) *apptype.DoubleKeys {
 	var (
 		respbody, decodedMes []byte
 		req                  *http.Request
@@ -41,8 +41,11 @@ func getAccessAndRefresh(id int) *apptype.DoubleKeys {
 	doublekey := new(apptype.DoubleKeys)
 	client := createClient()
 
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://localhost:3000/test_login/hash/usual/%d", id), bytes.NewBuffer(nil))
+	req, err := http.NewRequest(method, fmt.Sprintf("https://localhost:3000/test/%s/%d", name, id), bytes.NewBuffer(nil))
 	req.Header.Set("Content-Type", "application/json")
+	if reftoken != "" {
+		req.Header.Set("Refresh-Token", reftoken)
+	}
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create a request: %s", err))
 	}
@@ -71,21 +74,7 @@ func getAccessAndRefresh(id int) *apptype.DoubleKeys {
 	return doublekey
 }
 
-func hashRefreshToken(token []byte) string {
-	hashedRefreshToken, err := bcrypt.GenerateFromPassword(token, bcrypt.MinCost)
-	if err != nil {
-		panic(err)
-	}
-	return string(hashedRefreshToken)
-}
-
-func checkAccess(t string) {
-	parts := strings.Split(t, ".")
-	if len(parts) != 3 {
-		panic("The access-token is incorrect")
-	}
-}
-
+// Checke(decode) a refresh token
 func checkRefreshString(t string) string {
 	base64Text := make([]byte, base64.StdEncoding.DecodedLen(len(t)))
 	_, err := base64.StdEncoding.Decode(base64Text, []byte(t))
@@ -95,6 +84,20 @@ func checkRefreshString(t string) string {
 	return string(base64Text)
 }
 
+// Make and save in the database a refresh token (base64 hash)
+func makeRefreshString(con *storage.Connection, id int, t string) string {
+	bcrypted, err := bcrypt.GenerateFromPassword([]byte(t), bcrypt.DefaultCost)
+	if err != nil {
+		panic(err)
+	}
+	err = con.SaveRefreshToken(bcrypted, id)
+	if err != nil {
+		panic(err)
+	}
+	return string(bcrypted)
+}
+
+// Check Access-Token if there is the information I've expected
 func checkAccessToken(RespToken string) {
 	token, err := jwt.Parse(RespToken, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -128,55 +131,16 @@ func checkAccessToken(RespToken string) {
 	log.Print("Access token is OK")
 }
 
-func checkAccessTokenJWT(t *jwt.Token) {
-	claims := t.Claims.(jwt.MapClaims)
-	ip, ok := claims["ip"].(string)
-	if !ok {
-		panic("ClientIP doesn't exist in the payload part of the have gotten token")
-	} else {
-		if ip != api.ClientIP {
-			panic(fmt.Sprintf("ip != api.ClientIP. Ip = %s and api.ClientIP = %s", ip, api.ClientIP))
-		}
-	}
-
-	expAt, ok := claims["expAt"].(time.Time)
-	if !ok {
-		panic("expAt doesn't exist in the payload part of the have gotten token")
-	} else {
-		if expAt != time.Now().Add(10*time.Minute) {
-			panic("The time in the token doesn't compare with the expected time")
-		}
-	}
-}
-
-func checkRefreshTokenJWT(t *jwt.Token) {
-	claims := t.Claims.(jwt.MapClaims)
-	ip, ok := claims["ip"].(string)
-	if !ok {
-		panic("ClientIP doesn't exist in the payload part of the have gotten token")
-	} else {
-		if ip != api.ClientIP {
-			panic(fmt.Sprintf("ip != api.ClientIP. Ip = %s and api.ClientIP = %s", ip, api.ClientIP))
-		}
-	}
-
-	expAt, ok := claims["expAt"].(time.Time)
-	if !ok {
-		panic("expAt doesn't exist in the payload part of the have gotten token")
-	} else {
-		if expAt != time.Now().Add(10*time.Hour) {
-			panic("The time in the token doesn't compare with the expected time")
-		}
-	}
-}
-
-func getAssessAndRefresh(con *storage.Connection) {
+// Test PATCH rest point. Expecte 2 new tokens (Access and Refresh).
+// Send only an id
+func getAccessAndRefreshTest(con *storage.Connection) {
+	log.Print("test getAccessAndRefreshTest() has just started")
 	defer con.DeleteCliets()
 	defer con.RestartSeq()
 
-	id := con.CreateNewClient("misha", "example@gmail.com", "123.32.232.34")
+	id := con.CreateNewClient("misha", "example@example.com", "123.32.232.34")
 
-	doubleKeys := getAccessAndRefresh(id)
+	doubleKeys := callAccessAndRefreshServer(id, "GET", "login", "")
 
 	checkAccessToken(doubleKeys.Access)
 	reftoken := checkRefreshString(doubleKeys.Refresh)
@@ -191,15 +155,42 @@ func getAssessAndRefresh(con *storage.Connection) {
 	} else {
 		log.Print("Refresh token is OK")
 	}
-	log.Print("test getAssessAndRefresh() has just finished")
+	log.Print("test getAccessAndRefreshTest() has just finished")
 }
 
-// Start all of tests that exist in this module
-func StartTests() {
-	con, err := storage.Connect()
+// Test PATCH rest point. Expecte 2 new tokens (Access and Refresh).
+// Send an id and (old) refresh token
+func patchAccessByRefreshTest(con *storage.Connection) {
+	log.Print("test patchAccessByRefreshTest() has just started")
+	defer con.DeleteCliets()
+	defer con.RestartSeq()
+
+	id := con.CreateNewClient("misha", "example@example.com", "123.32.232.34")
+	oldreftoken := makeRefreshString(con, id, "old-refresh-token")
+
+	doublekey := callAccessAndRefreshServer(id, "PATCH", "refresh", oldreftoken)
+
+	checkAccessToken(doublekey.Access)
+	newreftoken := checkRefreshString(doublekey.Refresh)
+
+	tokenDB, err := con.GetRefreshToken(id)
 	if err != nil {
 		panic(err)
 	}
 
-	getAssessAndRefresh(con)
+	if err = bcrypt.CompareHashAndPassword(tokenDB, []byte(newreftoken)); err != nil {
+		panic(fmt.Sprintf("The token in the database doesn't compare to the new reftoken: %s", newreftoken))
+	} else {
+		log.Print("New refresh token is OK")
+	}
+	log.Print("test patchAccessByRefreshTest() has just finished")
+}
+
+// Start all of tests that exist in this module
+func StartTests(con *storage.Connection) {
+	con.DeleteCliets()
+	con.RestartSeq()
+
+	getAccessAndRefreshTest(con)
+	patchAccessByRefreshTest(con)
 }

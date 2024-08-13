@@ -1,9 +1,7 @@
 package app
 
 import (
-	"crypto/sha512"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"time"
@@ -20,29 +18,9 @@ const (
 	subject   string = "!!!WARNING!!!"
 )
 
-func HashRefreshToken(token []byte) ([]byte, error) {
-	return bcrypt.GenerateFromPassword(token, bcrypt.MinCost)
-}
-
-func CreateAccessTokenSha512(ip string) (string, error) {
-	var hashString string
-	token := jwt.New(jwt.SigningMethodHS256)
-	claims := token.Claims.(jwt.MapClaims)
-	claims["expAt"] = time.Now().Add(time.Minute * 30).Unix()
-	claims["ip"] = ip
-	key := []byte(os.Getenv("JWT_SECRET"))
-	tokenString, err := token.SignedString(key)
-	if err == nil {
-		hash := sha512.New()
-		hash.Write([]byte(tokenString))
-		hashBytes := hash.Sum(nil)
-		hashString = hex.EncodeToString(hashBytes)
-	}
-	return hashString, err
-}
-
-func CreateAccessToken(ip string) (string, error) {
-	token := jwt.New(jwt.SigningMethodHS256)
+// Create an Access (JWT) token
+func createAccessToken(ip string) (string, error) {
+	token := jwt.New(jwt.SigningMethodHS512)
 	claims := token.Claims.(jwt.MapClaims)
 	claims["expAt"] = time.Now().Add(30 * time.Minute).Unix()
 	claims["ip"] = ip
@@ -50,6 +28,7 @@ func CreateAccessToken(ip string) (string, error) {
 	return token.SignedString(key)
 }
 
+// Check a refresh token
 func checkRefreshToken(con *storage.Connection, id int, token string) error {
 	var tokenDB []byte
 	base64Text := make([]byte, base64.StdEncoding.DecodedLen(len(token)))
@@ -64,6 +43,7 @@ func checkRefreshToken(con *storage.Connection, id int, token string) error {
 
 }
 
+// Create and save a refresh token
 func createAndSaveRefreshToken(con *storage.Connection, id int) (string, error) {
 	var (
 		encodedString string
@@ -91,6 +71,7 @@ func createAndSaveRefreshToken(con *storage.Connection, id int) (string, error) 
 	return encodedString, err
 }
 
+// Send a message to client's email
 func sendEmail(con *storage.Connection, id int, ip string) error {
 	message := fmt.Sprintf("Someone is trying to sign in in your account from a diffrent device! Their IP is %s. If this is you just ignore the message.", ip)
 	to, err := con.SelectEmail(id)
@@ -107,26 +88,33 @@ func sendEmail(con *storage.Connection, id int, ip string) error {
 	return err
 }
 
+// Chech id and if it doesn't exist it will send a error
 func CheckRequestData(con *storage.Connection, id int) error {
 	var (
 		err error
+		ok  bool
 	)
-	ok, err := con.CheckId(id)
+	ok, err = con.CheckId(id)
 	if !ok && err == nil {
 		err = fmt.Errorf("the id doesn't exist in the database")
 	}
 	return err
 }
 
-func CreateAccessAndRefreshTokens(createAccess func(string) (string, error), doublekeys *apptype.DoubleKeys, con *storage.Connection, id int, ip string) error {
+// Create an Access token and a Refresh token
+func CreateAccessAndRefreshTokens(doublekeys *apptype.DoubleKeys, con *storage.Connection, id int, ip string) error {
 	var err error
-	doublekeys.Access, err = createAccess(ip)
+	doublekeys.Access, err = createAccessToken(ip)
 	if err == nil {
 		doublekeys.Refresh, err = createAndSaveRefreshToken(con, id)
 	}
 	return err
 }
 
+// Check an Id, an Ip and a Refresh token.
+// If Id is Ok and Refresh token is ok as well,
+// but ip isn't match to a previous one this function
+// will send a message to the client's email
 func CheckIdAndIpAndRefreshToken(con *storage.Connection, id int, ip, token string) error {
 	var (
 		idOk, ipOk bool
@@ -135,7 +123,7 @@ func CheckIdAndIpAndRefreshToken(con *storage.Connection, id int, ip, token stri
 	idOk, err = con.CheckId(id)
 	if idOk {
 		ipOk, err = con.CheckIP(id, ip)
-		if ipOk {
+		if ipOk && err == nil {
 			err = checkRefreshToken(con, id, token)
 		} else {
 			err = sendEmail(con, id, ip)

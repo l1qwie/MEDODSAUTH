@@ -23,6 +23,7 @@ type Error struct {
 	Err string `json:"error"`
 }
 
+// Decode some data usually from a request
 func Decode(data, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -47,6 +48,7 @@ func Decode(data, key []byte) ([]byte, error) {
 	return gcm.Open(nil, nonce, ciphertext, nil)
 }
 
+// Endcode some data usually for a response
 func Encode(data, key []byte) ([]byte, error) {
 	var (
 		gcm           cipher.AEAD
@@ -70,6 +72,7 @@ func Encode(data, key []byte) ([]byte, error) {
 	return result, err
 }
 
+// Prepare any responses
 func prepapreResponse(doublekey *apptype.DoubleKeys, statreq *int, encodedBody *[]byte, err error) {
 	if err != nil {
 		bodyResponse, _ := json.Marshal(&Error{Err: err.Error()})
@@ -82,7 +85,8 @@ func prepapreResponse(doublekey *apptype.DoubleKeys, statreq *int, encodedBody *
 	}
 }
 
-func GetAccessAndRefreshTokens(ctx *gin.Context, con *storage.Connection, createAccess func(string) (string, error)) {
+// Get Token
+func GetAccessAndRefreshTokens(ctx *gin.Context, con *storage.Connection) {
 	log.Print("Got into GetAccessAndRefreshTokens()")
 	var (
 		statreq     int
@@ -95,7 +99,7 @@ func GetAccessAndRefreshTokens(ctx *gin.Context, con *storage.Connection, create
 	if err == nil {
 		err = app.CheckRequestData(con, id)
 		if err == nil {
-			err = app.CreateAccessAndRefreshTokens(createAccess, doublekey, con, id, ctx.ClientIP())
+			err = app.CreateAccessAndRefreshTokens(doublekey, con, id, ctx.ClientIP())
 		}
 	}
 	log.Printf("Intermediate result: id: %d, doublekey: %v, err: %s", id, doublekey, err)
@@ -106,7 +110,8 @@ func GetAccessAndRefreshTokens(ctx *gin.Context, con *storage.Connection, create
 	log.Printf("Got out of GetAccessAndRefreshTokens()")
 }
 
-func RefreshOperation(ctx *gin.Context, con *storage.Connection, createAccess func(string) (string, error)) {
+// Refresh
+func RefreshOperation(ctx *gin.Context, con *storage.Connection) {
 	log.Print("Got into RefreshOperation()")
 	var (
 		statreq     int
@@ -116,13 +121,12 @@ func RefreshOperation(ctx *gin.Context, con *storage.Connection, createAccess fu
 	id, err := strconv.Atoi(idstr)
 	doublekey := new(apptype.DoubleKeys)
 	if err == nil {
+		token := ctx.Request.Header["Refresh-Token"][0]
+		err = app.CheckIdAndIpAndRefreshToken(con, id, ctx.ClientIP(), token)
 		if err == nil {
-			token := ctx.Request.Header["Refresh-Token"][0]
-			err = app.CheckIdAndIpAndRefreshToken(con, id, ctx.ClientIP(), token)
-			if err == nil {
-				err = app.CreateAccessAndRefreshTokens(createAccess, doublekey, con, id, ctx.ClientIP())
-			}
+			err = app.CreateAccessAndRefreshTokens(doublekey, con, id, ctx.ClientIP())
 		}
+
 	}
 	log.Printf("Intermediate result: id: %d, doublekey: %v, err: %s", id, doublekey, err)
 

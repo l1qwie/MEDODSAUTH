@@ -3,10 +3,8 @@ package storage
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 
-	"github.com/l1qwie/MEDODSAUTH/apptype"
 	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
@@ -19,14 +17,6 @@ type Connection struct {
 // You might get an error if the conection is failed
 func Connect() (*Connection, error) {
 	con := new(Connection)
-
-	log.Printf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		os.Getenv("host_db"),
-		os.Getenv("port_db"),
-		os.Getenv("user_db"),
-		os.Getenv("password_db"),
-		os.Getenv("dbname_db"),
-		os.Getenv("sslmode_db"))
 
 	conninf := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		os.Getenv("host_db"),
@@ -55,6 +45,7 @@ func (c *Connection) DeleteCliets() {
 	}
 }
 
+// Rester the sequence
 func (c *Connection) RestartSeq() {
 	query := "ALTER SEQUENCE clients_id_seq RESTART WITH 1"
 	_, err := c.db.Exec(query)
@@ -63,6 +54,7 @@ func (c *Connection) RestartSeq() {
 	}
 }
 
+// Get a refresh token from the database by a specific id
 func (c *Connection) GetRefreshToken(id int) ([]byte, error) {
 	var token []byte
 	query := "SELECT refreshtoken FROM Clients WHERE id = $1"
@@ -70,6 +62,7 @@ func (c *Connection) GetRefreshToken(id int) ([]byte, error) {
 	return token, err
 }
 
+// Save refresh token in the database by a specific id
 func (c *Connection) SaveRefreshToken(token []byte, id int) error {
 	query := "UPDATE Clients SET refreshtoken = $1 WHERE id = $2"
 	_, err := c.db.Exec(query, token, id)
@@ -81,17 +74,7 @@ func (c *Connection) SaveRefreshToken(token []byte, id int) error {
 	return err
 }
 
-func (c *Connection) FindNicknameOrEmail(client *apptype.Client) (bool, bool, error) {
-	var email, nickname int
-	query := "SELECT COUNT(*) FROM Clients WHERE nickname = $1"
-	err := c.db.QueryRow(query, client.Nickname).Scan(&nickname)
-	if err == nil {
-		query = "SELECT COUNT(*) FROM Clients WHERE email = $1"
-		err = c.db.QueryRow(query, client.Email).Scan(&email)
-	}
-	return nickname == 0, email == 0, err
-}
-
+// Create a new clients only for tests
 func (c *Connection) CreateNewClient(nickname, email, ip string) int {
 	var id int
 	query := "INSERT INTO Clients (nickname, email, ip) VALUES ($1, $2, $3)"
@@ -107,6 +90,7 @@ func (c *Connection) CreateNewClient(nickname, email, ip string) int {
 	return id
 }
 
+// Check an id. If the id exists, you'll get true, if vice versa - false
 func (c *Connection) CheckId(id int) (bool, error) {
 	var count int
 	query := "SELECT COUNT(*) FROM Clients WHERE id = $1"
@@ -114,6 +98,7 @@ func (c *Connection) CheckId(id int) (bool, error) {
 	return count == 1, err
 }
 
+// Check an ip by a specific id. If the ip by the id exists, you'll get true, if vice versa - false
 func (c *Connection) CheckIP(id int, ip string) (bool, error) {
 	var count int
 	query := "SELECT COUNT(*) FROM Clients WHERE id = $1 AND ip = $2"
@@ -121,9 +106,19 @@ func (c *Connection) CheckIP(id int, ip string) (bool, error) {
 	return count == 1, err
 }
 
+// Get an email from the database
 func (c *Connection) SelectEmail(id int) (string, error) {
 	var email string
 	query := "SELECT email FROM Clients WHERE id = $1"
 	err := c.db.QueryRow(query, id).Scan(&email)
 	return email, err
+}
+
+// Create a client for getting better user experience (only for a real using)
+func (c *Connection) CreateMokData() {
+	query := "INSERT INTO Clients (nickname, email, ip) VALUES ('shashala', 'example@example.com', '213.136.11.188')"
+	_, err := c.db.Exec(query)
+	if err != nil {
+		panic(err)
+	}
 }

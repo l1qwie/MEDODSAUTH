@@ -6,13 +6,14 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	api "github.com/l1qwie/MEDODSAUTH/api/rest"
-	"github.com/l1qwie/MEDODSAUTH/app"
+	"github.com/l1qwie/MEDODSAUTH/api"
 	"github.com/l1qwie/MEDODSAUTH/apptype"
 	"github.com/l1qwie/MEDODSAUTH/storage"
 	"github.com/l1qwie/MEDODSAUTH/tests"
 )
 
+// Create environment like a connection to the database
+// and get the symmetric key from the specific file to a go value
 func createEnv() *storage.Connection {
 	var err error
 	apptype.SymKey, err = os.ReadFile("keys/symmetric-key.bin")
@@ -26,25 +27,24 @@ func createEnv() *storage.Connection {
 	return con
 }
 
-func startServer(con *storage.Connection) {
+// Start the server. Four rest points and only two of them for testing
+func startServer(con *storage.Connection) *gin.Engine {
 	router := gin.Default()
 
-	router.GET("/login/hash/usual/:id", func(ctx *gin.Context) {
-		api.GetAccessAndRefreshTokens(ctx, con, app.CreateAccessToken)
+	router.GET("/login/:id", func(ctx *gin.Context) {
+		api.GetAccessAndRefreshTokens(ctx, con)
+	})
+	router.PATCH("/refresh/:id", func(ctx *gin.Context) {
+		api.RefreshOperation(ctx, con)
 	})
 
-	router.GET("/login/hash/sha512/:id", func(ctx *gin.Context) {
-		api.GetAccessAndRefreshTokens(ctx, con, app.CreateAccessTokenSha512)
-	})
-
-	router.GET("/test_login/hash/usual/:id", func(ctx *gin.Context) {
+	router.GET("/test/login/:id", func(ctx *gin.Context) {
 		api.ClientIP = ctx.ClientIP()
-		api.GetAccessAndRefreshTokens(ctx, con, app.CreateAccessToken)
+		api.GetAccessAndRefreshTokens(ctx, con)
 	})
-
-	router.PATCH("/test_refresh/hash/usual/:id", func(ctx *gin.Context) {
+	router.PATCH("/test/refresh/:id", func(ctx *gin.Context) {
 		api.ClientIP = ctx.ClientIP()
-		api.RefreshOperation(ctx, con, app.CreateAccessToken)
+		api.RefreshOperation(ctx, con)
 	})
 
 	certFile := "keys/server.crt"
@@ -55,11 +55,25 @@ func startServer(con *storage.Connection) {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to start HTTPS server: %v", err))
 	}
+	return router
+}
+
+// Start all tests
+func startTests(con *storage.Connection) {
+	go startServer(con)
+	tests.StartTests(con)
 }
 
 func main() {
 	con := createEnv()
 
-	go startServer(con)
-	tests.StartTests()
+	// There are 2 tests to check 2 rest points.
+	// You must turn it on only if you've already turned startServer(con) and con.CreateMokData() off
+	// To turn those two functions off just comment them
+	startTests(con)
+
+	// Here are 2 functions for a real using. If you want to use my program as a real program, not a test
+	// you should make sure that these two aren't commented
+	// con.CreateMokData()
+	// startServer(con)
 }
