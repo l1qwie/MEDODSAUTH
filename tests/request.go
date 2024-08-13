@@ -138,7 +138,7 @@ func getAccessAndRefreshTest(con *storage.Connection) {
 	defer con.DeleteCliets()
 	defer con.RestartSeq()
 
-	id := con.CreateNewClient("misha", "example@example.com", "123.32.232.34")
+	id := con.CreateNewClient("example@example.com", "123.32.232.34")
 
 	doubleKeys := callAccessAndRefreshServer(id, "GET", "login", "")
 
@@ -165,7 +165,7 @@ func patchAccessByRefreshTest(con *storage.Connection) {
 	defer con.DeleteCliets()
 	defer con.RestartSeq()
 
-	id := con.CreateNewClient("misha", "example@example.com", "123.32.232.34")
+	id := con.CreateNewClient("example@example.com", "123.32.232.34")
 	oldreftoken := makeRefreshString(con, id, "old-refresh-token")
 
 	doublekey := callAccessAndRefreshServer(id, "PATCH", "refresh", oldreftoken)

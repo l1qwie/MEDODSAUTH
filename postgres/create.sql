@@ -5,6 +5,3 @@ CREATE TABLE Clients (
     ip VARCHAR(255),
     refreshtoken BYTEA
 );
-
-CREATE INDEX nick ON Clients (nickname);
-CREATE INDEX email ON Clients (email);

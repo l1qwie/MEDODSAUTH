@@ -75,15 +75,15 @@ func (c *Connection) SaveRefreshToken(token []byte, id int) error {
 }
 
 // Create a new clients only for tests
-func (c *Connection) CreateNewClient(nickname, email, ip string) int {
+func (c *Connection) CreateNewClient(email, ip string) int {
 	var id int
-	query := "INSERT INTO Clients (nickname, email, ip) VALUES ($1, $2, $3)"
-	_, err := c.db.Exec(query, nickname, email, ip)
+	query := "INSERT INTO Clients (email, ip) VALUES ($1, $2)"
+	_, err := c.db.Exec(query, email, ip)
 	if err != nil {
 		panic(err)
 	}
-	query = "SELECT id FROM Clients WHERE nickname = $1"
-	err = c.db.QueryRow(query, nickname).Scan(&id)
+	query = "SELECT id FROM Clients WHERE email = $1"
+	err = c.db.QueryRow(query, email).Scan(&id)
 	if err != nil {
 		panic(err)
 	}
@@ -116,7 +116,7 @@ func (c *Connection) SelectEmail(id int) (string, error) {
 
 // Create a client for getting better user experience (only for a real using)
 func (c *Connection) CreateMokData() {
-	query := "INSERT INTO Clients (nickname, email, ip) VALUES ('shashala', 'example@example.com', '213.136.11.188')"
+	query := "INSERT INTO Clients (email, ip) VALUES ('example@example.com', '213.136.11.188')"
 	_, err := c.db.Exec(query)
 	if err != nil {
 		panic(err)
