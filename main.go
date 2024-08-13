@@ -70,10 +70,10 @@ func main() {
 	// There are 2 tests to check 2 rest points.
 	// You must turn it on only if you've already turned startServer(con) and con.CreateMokData() off
 	// To turn those two functions off just comment them
-	startTests(con)
+	// startTests(con)
 
 	// Here are 2 functions for a real using. If you want to use my program as a real program, not a test
 	// you should make sure that these two aren't commented
-	// con.CreateMokData()
-	// startServer(con)
+	con.CreateMokData()
+	startServer(con)
 }
