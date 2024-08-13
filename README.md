@@ -28,7 +28,7 @@
      ```bash
     make net
 
-- Из кодовой строки
+- Из терминала
     ```bash
     docker network create medods-auth
 
@@ -38,7 +38,7 @@
     ```bash
     make build
 
-- Из кодовой строки
+- Из терминала
     ```bash
     docker build . -t medods-auth-app
 
@@ -48,7 +48,7 @@
     ```bash
     make up
 
-- Из кодовой строки
+- Из терминала
     ```bash
     docker compose -f docker-compose.yml up --force-recreate
 
@@ -58,7 +58,7 @@
     ```bash
     make delete
 
-- Из кодовой строки
+- Из терминала
     ```bash
     docker compose stop \
 	&& docker compose rm \
