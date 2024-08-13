@@ -26,11 +26,11 @@
    
 - С помощью Makefile
      ```bash
-    make net``
+    make net
 
 - Из кодовой строки
     ```bash
-    docker network create congratulations``
+    docker network create medods-auth
 
 4. Создайте docker-image приложения:
 
